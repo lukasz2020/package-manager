@@ -1,90 +1,81 @@
-const Package = require('./model/Package');
-const Packages = require('./model/Packages');
-const lineByLine = require('n-readlines');
+const Package = require('./Package')
+const LineByLine = require('n-readlines')
 
 module.exports = class PackageConfigFileReader {
-    constructor() {
-        this.line = null;
-        this.lineNumber = 1;
-        this.numberOfPackages = 0;
-        this.numberOfDependencies = 0;
+  constructor () {
+    this.line = null
+    this.lineNumber = 1
+    this.numberOfPackages = 0
+    this.numberOfDependencies = 0
+  }
+
+  read (path) {
+    const packages = new Map()
+    const notFoundPackages = new Map()
+    const liner = new LineByLine(path)
+
+    while ((this.line = liner.next())) {
+      const lineContent = this.line.toString().trim()
+      if (this.lineNumber === 1) {
+        this.numberOfPackages = +lineContent
+      } else if (this.lineNumber <= this.numberOfPackages + 1) {
+        const packageData = lineContent.split(',')
+        const packageName = packageData[0]
+        const packageVersion = packageData[1]
+        const packageToInstall = new Package(packageName, packageVersion)
+        packages.set(packageToInstall.id, packageToInstall)
+      } else if (this.lineNumber === this.numberOfPackages + 2) {
+        this.numberOfDependencies = +lineContent
+      } else {
+        const dependencies = lineContent.split(',')
+        const packageName = dependencies.shift()
+        const packageVersion = dependencies.shift()
+        let parentPackage = packages.get(packageName + ',' + packageVersion)
+        if (!parentPackage) {
+          parentPackage = new Package(packageName, packageVersion)
+        }
+
+        while (dependencies.length) {
+          const packageName = dependencies.shift()
+          const packageVersion = dependencies.shift()
+          const dependencyPackage = new Package(packageName, packageVersion)
+          if (dependencyPackage.id !== parentPackage.id) {
+            parentPackage.dependencies.set(dependencyPackage.id, dependencyPackage)
+          }
+        }
+
+        if (packages.get(parentPackage.id)) {
+          packages.set(parentPackage.id, parentPackage)
+        } else {
+          notFoundPackages.set(parentPackage.id, parentPackage)
+        }
+      }
+      this.lineNumber++
     }
 
-    read (path) {
-        let packages = new Packages();
-        let notFoundPackages = new Packages();
-        const liner = new lineByLine(path);
+    for (const [notFoundPackageId, notFoundPackage] of notFoundPackages) {
+      for (const [notFoundPackageId2, notFoundPackage2] of notFoundPackages) {
+        if (notFoundPackageId !== notFoundPackageId2) {
+          const packageToInstallDependency = notFoundPackage2.findDependency(notFoundPackageId)
 
-        while (this.line = liner.next()) {
-            const lineContent = this.line.toString().trim();
-            if (this.lineNumber === 1) {
-                this.numberOfPackages = +lineContent
-            } else if (this.lineNumber <= this.numberOfPackages + 1) {
-                const packageData = lineContent.split(',');
-                const packageName = packageData[0];
-                const packageVersion = packageData[1];
-                const packageToInstall = new Package(packageName, packageVersion);
-                packages.set(packageToInstall.id, packageToInstall);
-            } else if(this.lineNumber === this.numberOfPackages + 2){
-                this.numberOfDependencies = +lineContent
-            } else {
-                const dependencies = lineContent.split(',');
-                let packageName = dependencies.shift();
-                let packageVersion = dependencies.shift();
-                let parentPackage = packages.get(packageName + ',' + packageVersion);
-                if (!parentPackage) {
-                    parentPackage = new Package(packageName, packageVersion);
-                }
-
-                while (dependencies.length) {
-                    let packageName = dependencies.shift();
-                    let packageVersion = dependencies.shift();
-                    const dependencyPackage = new Package(packageName, packageVersion);
-                    if (dependencyPackage.id !== parentPackage.id) {
-                        parentPackage.dependencies.set(dependencyPackage.id, dependencyPackage)
-                    }
-                }
-
-                if (packages.get(parentPackage.id)) {
-                    packages.set(parentPackage.id, parentPackage)
-                } else {
-                    notFoundPackages.set(parentPackage.id, parentPackage)
-                }
-            }
-            this.lineNumber++;
+          if (packageToInstallDependency) {
+            packageToInstallDependency.setDependencies(notFoundPackage.dependencies)
+            notFoundPackages.delete(notFoundPackageId)
+          }
         }
-
-
-        for (let [notFoundPackageId, notFoundPackage] of notFoundPackages) {
-            for (let [notFoundPackageId2, notFoundPackage2] of notFoundPackages) {
-                if (notFoundPackageId !== notFoundPackageId2) {
-                    let packageToInstallDependency = notFoundPackage2.findDependency(notFoundPackageId);
-
-                    if (packageToInstallDependency) {
-                        packageToInstallDependency.setDependencies(notFoundPackage.dependencies);
-                        notFoundPackages.delete(notFoundPackageId)
-                    }
-                }
-
-
-            }
-        }
-
-
-        for (let [notFoundPackageId, notFoundPackage] of notFoundPackages) {
-            for (let [packageToInstallId, packageToInstall] of packages) {
-                let packageToInstallDependency = packageToInstall.findDependency(notFoundPackageId);
-                if (packageToInstallDependency) {
-                    packageToInstallDependency.setDependencies(notFoundPackage.dependencies);
-                    notFoundPackages.delete(notFoundPackageId)
-                }
-            }
-        }
-
-
-        return packages;
-
-
-
+      }
     }
+
+    for (const [notFoundPackageId, notFoundPackage] of notFoundPackages) {
+      for (const packageToInstall of packages.values()) {
+        const packageToInstallDependency = packageToInstall.findDependency(notFoundPackageId)
+        if (packageToInstallDependency) {
+          packageToInstallDependency.setDependencies(notFoundPackage.dependencies)
+          notFoundPackages.delete(notFoundPackageId)
+        }
+      }
+    }
+
+    return packages
+  }
 }

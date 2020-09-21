@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js"
+    "start": "node index.js",
+    "standard": "standard --fix"
   },
   "keywords": [],
   "author": "",
@@ -13,5 +13,8 @@
   "dependencies": {
     "minimist": "^1.2.5",
     "n-readlines": "^1.0.0"
+  },
+  "devDependencies": {
+    "standard": "^14.3.4"
   }
 }
